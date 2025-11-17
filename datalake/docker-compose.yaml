@@ -1,0 +1,65 @@
+
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: admin12345
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  postgres:
+    image: postgres:15
+    container_name: iceberg-postgres
+    environment:
+      POSTGRES_USER: iceberg
+      POSTGRES_PASSWORD: iceberg
+      POSTGRES_DB: iceberg
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  iceberg-rest:
+    image: tabulario/iceberg-rest:latest
+    container_name: iceberg-rest
+
+    environment:
+      CATALOG__CATALOG_IMPL: org.apache.iceberg.jdbc.JdbcCatalog
+      CATALOG__URI: jdbc:postgresql://postgres:5432/iceberg
+      CATALOG__JDBC_USER: iceberg
+      CATALOG__JDBC_PASSWORD: iceberg
+      CATALOG__WAREHOUSE: s3://warehouse/
+      CATALOG__S3_ENDPOINT: http://minio:9000
+      CATALOG__S3_ACCESS_KEY_ID: admin
+      CATALOG__S3_SECRET_ACCESS_KEY: admin12345
+      CATALOG__S3_REGION: us-east-1
+      CATALOG__S3_PATH_STYLE_ACCESS: "true"
+
+      AWS_REGION: us-east-1
+
+    depends_on:
+      - postgres
+      - minio
+
+    ports:
+      - "8181:8181"
+
+  trino-coordinator:
+    image: trinodb/trino:latest
+    container_name: trino-coordinator
+    ports:
+      - "8080:8080"
+    depends_on:
+      - iceberg-rest
+    volumes:
+      - ./trino/etc:/etc/trino
+
+volumes:
+  minio_data:
+  postgres_data:
